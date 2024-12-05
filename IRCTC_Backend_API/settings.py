@@ -11,9 +11,13 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+import dj_database_url
+import os
+# Fetch DATABASE_URL and normalize the scheme
+raw_database_url = os.environ.get('DATABASE_URL', '')
+normalized_database_url = raw_database_url.replace('postgresql://', 'postgres://')
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -25,7 +29,7 @@ SECRET_KEY = 'django-insecure-y4_5&#rj@3v8)#2d$!ycio8400@c!k55(ut4o3d6x9_tk2_tu2
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -37,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'booking.apps.ApiConfig',
 ]
 
 MIDDLEWARE = [
@@ -73,12 +78,30 @@ WSGI_APPLICATION = 'IRCTC_Backend_API.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+# DATABASES = {
+#     'default': dj_database_url.parse(os.environ.get('DATABASE_URL'))
+    
+# }
+#DATABASE_URL = "postgresql://users_wo3t_user:RlvE7gRJ81jHC7EsYM6acO6vd2Uu5sP7@dpg-ct91lv3v2p9s73eoqcl0-a.singapore-postgres.render.com/users_wo3t"
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'users_wo3t',
+        'USER': 'users_wo3t_user',
+        'PASSWORD': 'RlvE7gRJ81jHC7EsYM6acO6vd2Uu5sP7',
+        'HOST': 'dpg-ct91lv3v2p9s73eoqcl0-a.singapore-postgres.render.com',
+        'PORT': '5432',
     }
 }
+
+#os.environ['DATABASE_URL'] = 'postgresql://users_wo3t_user:RlvE7gRJ81jHC7EsYM6acO6vd2Uu5sP7@dpg-ct91lv3v2p9s73eoqcl0-a.singapore-postgres.render.com/users_wo3t '
 
 
 # Password validation
