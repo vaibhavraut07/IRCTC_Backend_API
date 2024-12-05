@@ -27,7 +27,7 @@ normalized_database_url = raw_database_url.replace('postgresql://', 'postgres://
 SECRET_KEY = 'django-insecure-y4_5&#rj@3v8)#2d$!ycio8400@c!k55(ut4o3d6x9_tk2_tu2'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 
