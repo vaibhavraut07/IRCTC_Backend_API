@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import dj_database_url
 import os
+from datetime import timedelta
 # Fetch DATABASE_URL and normalize the scheme
 raw_database_url = os.environ.get('DATABASE_URL', '')
 normalized_database_url = raw_database_url.replace('postgresql://', 'postgres://')
@@ -81,12 +82,6 @@ WSGI_APPLICATION = 'IRCTC_Backend_API.wsgi.application'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 # DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-# DATABASES = {
 #     'default': dj_database_url.parse(os.environ.get('DATABASE_URL'))
     
 # }
@@ -103,6 +98,16 @@ DATABASES = {
     }
 }
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}
 #os.environ['DATABASE_URL'] = 'postgresql://users_wo3t_user:RlvE7gRJ81jHC7EsYM6acO6vd2Uu5sP7@dpg-ct91lv3v2p9s73eoqcl0-a.singapore-postgres.render.com/users_wo3t '
 
 
