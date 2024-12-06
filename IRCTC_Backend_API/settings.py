@@ -14,6 +14,13 @@ from pathlib import Path
 import dj_database_url
 import os
 from datetime import timedelta
+import environ
+
+
+env = environ.Env()
+
+environ.Env.read_env()
+
 # Fetch DATABASE_URL and normalize the scheme
 raw_database_url = os.environ.get('DATABASE_URL', '')
 normalized_database_url = raw_database_url.replace('postgresql://', 'postgres://')
@@ -59,7 +66,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 # settings.py
-ADMIN_API_KEY = '038d22447b60d49008f86d8a460d425a8f8753e7d255c5efaebec5ffe1d67514'
+ADMIN_API_KEY = env('ADMIN_API_KEY')
 
 
 ROOT_URLCONF = 'IRCTC_Backend_API.urls'

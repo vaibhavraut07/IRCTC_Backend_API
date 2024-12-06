@@ -10,6 +10,8 @@ from django.http import JsonResponse
 from django.db.models import F
 from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.db import transaction
+from django.contrib.auth.decorators import login_required
 
 
 logger = logging.getLogger(__name__)
@@ -144,81 +146,128 @@ def add_train(request):
 @csrf_exempt
 def get_seat_availability(request):
     if request.method != 'GET':
+        logger.error("Method not allowed in get_seat_availability")
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
     try:
-        source = request.GET.get('source')
-        destination = request.GET.get('destination')
+        # Get and validate parameters
+        data = request.GET
+        if 'source' not in data or 'destination' not in data:
+            return JsonResponse({'error': 'Source and destination are required'}, status=400)
+
+        source = data['source']
+        destination = data['destination']
         
-        if not source or not destination:
-            return JsonResponse({
-                'error': 'Source and destination are required'
-            }, status=400)
+        # Query trains
+        trains = Train.objects.filter(source=source, destination=destination)
         
-        trains = Train.objects.filter(
-            source=source,
-            destination=destination
-        ).values('id', 'name', 'available_seats')
+        # Format response
+        trains_data = [{
+            'id': train.id,
+            'name': train.name,
+            'source': train.source,
+            'destination': train.destination,
+            'available_seats': train.available_seats,
+            'total_seats': train.total_seats
+        } for train in trains]
         
-        return JsonResponse({
-            'trains': list(trains)
-        })
-        
+        return JsonResponse({'trains': trains_data})
+
     except Exception as e:
+        logger.error(f"Error in get_seat_availability: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
-# User endpoint to book a seat
 @csrf_exempt
+@login_required
+@transaction.atomic
+@csrf_exempt
+@login_required
+@transaction.atomic
 def book_seat(request):
     if request.method != 'POST':
+        logger.error("Method not allowed")
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
-    data = json.loads(request.body)
-    train_id = data.get('train_id')
-    
+
     try:
-        train = Train.objects.get(id=train_id)
+        logger.info("Booking seat request received")
+        # Verify authenticated user
+        if not request.user.is_authenticated:
+            logger.error("User not authenticated")
+            return JsonResponse({'error': 'Authentication required'}, status=401)
+            
+        # Parse JSON data
+        data = json.loads(request.body)
+        logger.info(f"Request data: {data}")
+        
+        if 'train_id' not in data:
+            logger.error("Missing train_id")
+            return JsonResponse({'error': 'Train ID is required'}, status=400)
+            
+        train_id = data['train_id']
+        
+        # Get train with lock
+        train = Train.objects.select_for_update().get(id=train_id)
+        logger.info(f"Train found: {train.name}")
+
+        if train.available_seats <= 0:
+            logger.error(f"No seats available for train {train.name}")
+            return JsonResponse({'error': 'No seats available'}, status=400)
+            
+        # Book seat
+        train.available_seats -= 1
+        train.save()
+
+        # Create booking
+        booking = Booking.objects.create(
+            user=request.user,
+            train=train
+        )
+        
+        return JsonResponse({
+            'message': 'Booking successful',
+            'booking': {
+                'id': booking.id,
+                'train_name': train.name,
+                'source': train.source,
+                'destination': train.destination
+            }
+        })
+
     except Train.DoesNotExist:
+        logger.error(f"Train with ID {train_id} does not exist")
         return JsonResponse({'error': 'Train not found'}, status=404)
-    
-    available_seat = Seat.objects.filter(train=train, is_booked=False).first()
-    if not available_seat:
-        return JsonResponse({'error': 'No available seats'}, status=400)
-    
-    # Optimistic locking to handle race conditions
-    if available_seat.is_booked:
-        return JsonResponse({"error": "Seat is already booked"}, status=400)
+    except Exception as e:
+        logger.error(f"Error in booking: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=400)
 
-    rows_updated = Seat.objects.filter(
-        pk=available_seat.pk,
-        version=available_seat.version
-    ).update(
-        is_booked=True,
-        version=F('version') + 1
-    )
-    
-    if rows_updated == 0:
-        return JsonResponse({"error": "Booking failed due to concurrent modification. Please try again."}, status=400)
-    
-    booking = Booking.objects.create(user=request.user, train=train, seat=available_seat)
-    return JsonResponse({'message': 'Booking successful', 'booking_id': booking.id})
-
-# User endpoint to get specific booking details
 @csrf_exempt
 def get_booking_details(request):
     if request.method != 'GET':
+        logger.error("Method not allowed in get_booking_details")
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
-    booking_id = request.GET.get('booking_id')
-    
+
     try:
+        # Get and validate parameters
+        booking_id = request.GET.get('booking_id')
+        if not booking_id:
+            return JsonResponse({'error': 'Booking ID is required'}, status=400)
+            
+        # Get booking
         booking = Booking.objects.get(id=booking_id)
+        
+        # Format response
+        return JsonResponse({
+            'booking': {
+                'id': booking.id,
+                'train_name': booking.train.name,
+                'source': booking.train.source,
+                'destination': booking.train.destination,
+                'booking_time': booking.booking_time
+            }
+        })
+
     except Booking.DoesNotExist:
         return JsonResponse({'error': 'Booking not found'}, status=404)
-    
-    return JsonResponse({
-        'booking_id': booking.id,
-        'train_id': booking.train.id,
-        'seat_id': booking.seat.id,
-        'status': 'Booked' if booking.seat.is_booked else 'Available'
-    })
+    except Exception as e:
+        logger.error(f"Error in get_booking_details: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=400)
