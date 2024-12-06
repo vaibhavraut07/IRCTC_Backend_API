@@ -14,27 +14,32 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 @csrf_exempt
+@csrf_exempt
 def register_user(request):
     if request.method != 'POST':
+        logger.error("Method not allowed, only POST is allowed.")
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
+    logger.info("Register API triggered")
     try:
         # Parse JSON data from request body
         data = json.loads(request.body)
-        
+        logger.info(f"Received data: {data}")
+
         # Validate required fields
         if 'username' not in data or 'password' not in data:
-            return JsonResponse({
-                'error': 'Username and password are required'
-            }, status=400)
-            
+            logger.error("Missing 'username' or 'password' in the request")
+            return JsonResponse({'error': 'Username and password are required'}, status=400)
+         
+        # Create the user
         user = User.objects.create_user(
             username=data['username'],
             password=data['password'],
             role=data.get('role', 'user'),
             is_active=True
         )
-        
+
+        # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
         return JsonResponse({
             'message': 'Registration successful',
@@ -43,15 +48,14 @@ def register_user(request):
                 'access': str(refresh.access_token)
             }
         }, status=201)
-        
+
     except json.JSONDecodeError:
-        return JsonResponse({
-            'error': 'Invalid JSON data'
-        }, status=400)
+        logger.error("Invalid JSON data received")
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+
     except Exception as e:
-        return JsonResponse({
-            'error': str(e)
-        }, status=400)
+        logger.error(f"Error occurred during registration: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=400)
 
 @csrf_exempt
 def login_user(request):
