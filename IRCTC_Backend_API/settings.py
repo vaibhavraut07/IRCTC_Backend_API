@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'booking.apps.ApiConfig',
     'rest_framework',
     'rest_framework_simplejwt',
-    #'booking',
+    
 ]
 
 MIDDLEWARE = [
