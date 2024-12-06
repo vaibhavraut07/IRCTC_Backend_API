@@ -109,3 +109,22 @@ def login_user(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 
+def add_train(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        # Example of adding a new train, assuming the API key is validated by middleware
+        source = request.POST['source']
+        destination = request.POST['destination']
+        train_number = request.POST['train_number']
+
+        train = Train.objects.create(
+            source=source,
+            destination=destination,
+            train_number=train_number
+        )
+
+        return JsonResponse({'message': 'Train added successfully'}, status=201)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)

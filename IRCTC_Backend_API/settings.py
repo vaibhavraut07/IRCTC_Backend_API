@@ -54,9 +54,13 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     #'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'booking.middleware.AdminAPIKeyMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+# settings.py
+ADMIN_API_KEY = '038d22447b60d49008f86d8a460d425a8f8753e7d255c5efaebec5ffe1d67514'
+
 
 ROOT_URLCONF = 'IRCTC_Backend_API.urls'
 
@@ -131,6 +135,8 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+
 
 
 # Internationalization

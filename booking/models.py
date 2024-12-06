@@ -28,5 +28,27 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
+    
+
+class Train(models.Model):
+    name = models.CharField(max_length=255)
+    source = models.CharField(max_length=255)
+    destination = models.CharField(max_length=255)
+    total_seats = models.IntegerField()
+
+    def __str__(self):
+        return f"{self.name} ({self.source} -> {self.destination})"
+
+class Seat(models.Model):
+    train = models.ForeignKey(Train, on_delete=models.CASCADE, related_name='seats')
+    seat_number = models.IntegerField()
+    is_booked = models.BooleanField(default=False)
+    version = models.IntegerField(default=0)  # For optimistic locking
+
+class Booking(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='bookings')
+    train = models.ForeignKey(Train, on_delete=models.CASCADE, related_name='bookings')
+    seat = models.OneToOneField(Seat, on_delete=models.CASCADE, related_name='booking')
+    booking_time = models.DateTimeField(auto_now_add=True)
 
 # Create your models here.
