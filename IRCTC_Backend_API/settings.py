@@ -111,10 +111,14 @@ DATABASES = {
 }
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }
+
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
@@ -122,7 +126,7 @@ SIMPLE_JWT = {
 }
 #os.environ['DATABASE_URL'] = 'postgresql://users_wo3t_user:RlvE7gRJ81jHC7EsYM6acO6vd2Uu5sP7@dpg-ct91lv3v2p9s73eoqcl0-a.singapore-postgres.render.com/users_wo3t '
 AUTH_USER_MODEL = 'booking.User'
-AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
+AUTHENTICATION_BACKENDS = ['rest_framework_simplejwt.authentication.JWTAuthentication','django.contrib.auth.backends.ModelBackend']
 
 
 # Password validation

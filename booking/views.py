@@ -12,7 +12,9 @@ from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.db import transaction
 from django.contrib.auth.decorators import login_required
-
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 logger = logging.getLogger(__name__)
 
@@ -177,11 +179,9 @@ def get_seat_availability(request):
         logger.error(f"Error in get_seat_availability: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
-@csrf_exempt
-@login_required
-@transaction.atomic
-@csrf_exempt
-@login_required
+@api_view(['POST'])
+#@csrf_exempt
+@permission_classes([IsAuthenticated])
 @transaction.atomic
 def book_seat(request):
     if request.method != 'POST':
@@ -190,46 +190,84 @@ def book_seat(request):
 
     try:
         logger.info("Booking seat request received")
+        
         # Verify authenticated user
         if not request.user.is_authenticated:
             logger.error("User not authenticated")
             return JsonResponse({'error': 'Authentication required'}, status=401)
-            
+
         # Parse JSON data
         data = json.loads(request.body)
         logger.info(f"Request data: {data}")
-        
-        if 'train_id' not in data:
-            logger.error("Missing train_id")
-            return JsonResponse({'error': 'Train ID is required'}, status=400)
-            
-        train_id = data['train_id']
-        
-        # Get train with lock
+
+        # Validate required fields
+        train_id = data.get('train_id')
+        source = data.get('source')
+        destination = data.get('destination')
+
+        if not all([train_id, source, destination]):
+            logger.error("Missing train_id, source, or destination")
+            return JsonResponse({'error': 'Train ID, source, and destination are required'}, status=400)
+
+        # Fetch train with lock
         train = Train.objects.select_for_update().get(id=train_id)
         logger.info(f"Train found: {train.name}")
 
-        if train.available_seats <= 0:
-            logger.error(f"No seats available for train {train.name}")
-            return JsonResponse({'error': 'No seats available'}, status=400)
-            
-        # Book seat
+        # Now handle train.route correctly
+        route = train.route  # Assuming train.route stores either a list or string
+        
+        # If route is a list (e.g., JSONField)
+        if isinstance(route, list):
+            if source not in route or destination not in route or route.index(source) >= route.index(destination):
+                logger.error("Invalid source or destination for train route")
+                return JsonResponse({'error': 'Invalid source or destination for the selected train'}, status=400)
+
+        # If route is a string (comma-separated)
+        elif isinstance(route, str):
+            if route:
+                route = route.split(',')  # Split string into a list
+                if source not in route or destination not in route or route.index(source) >= route.index(destination):
+                    logger.error("Invalid source or destination for train route")
+                    return JsonResponse({'error': 'Invalid source or destination for the selected train'}, status=400)
+            else:
+                logger.error("Train route is not defined properly")
+                return JsonResponse({'error': 'Train route is not defined properly'}, status=400)
+        else:
+            logger.error("Invalid route format")
+            return JsonResponse({'error': 'Invalid route format for the train'}, status=400)
+
+        # Check for available seats
+        available_seat = Seat.objects.filter(train=train, is_booked=False).first()
+        if not available_seat:
+            logger.error("No seats available")
+            return JsonResponse({'error': 'No available seats for the selected train'}, status=400)
+
+        # Book the seat
+        available_seat.is_booked = True
+        available_seat.save()
+
+        # Create the booking
+        booking = Booking.objects.create(
+            user=request.user,
+            train=train,
+            seat=available_seat,
+            source=source,
+            destination=destination
+        )
+
+        # Decrease available seats count for the train
         train.available_seats -= 1
         train.save()
 
-        # Create booking
-        booking = Booking.objects.create(
-            user=request.user,
-            train=train
-        )
-        
+        logger.info(f"Booking successful for user {request.user.username}")
         return JsonResponse({
             'message': 'Booking successful',
             'booking': {
                 'id': booking.id,
                 'train_name': train.name,
-                'source': train.source,
-                'destination': train.destination
+                'source': source,
+                'destination': destination,
+                'seat_id': available_seat.id
             }
         })
 
