@@ -3,17 +3,17 @@ import logging
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.contrib.auth import authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, Train, Seat, Booking
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
 from django.db.models import F
 from django.conf import settings
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 logger = logging.getLogger(__name__)
-@csrf_exempt
+
 @csrf_exempt
 def register_user(request):
     if request.method != 'POST':
@@ -108,48 +108,64 @@ def login_user(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 
+@csrf_exempt
 def add_train(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-
+    
     try:
-        # Example of adding a new train, assuming the API key is validated by middleware
-        source = request.POST['source']
-        destination = request.POST['destination']
-        train_number = request.POST['train_number']
-
+        data = json.loads(request.body)
+        
+        # Create train
         train = Train.objects.create(
-            source=source,
-            destination=destination,
-            train_number=train_number
+            name=data['name'],
+            source=data['source'],
+            destination=data['destination'],
+            total_seats=data['total_seats'],
+            available_seats=data['total_seats']
         )
-
-        return JsonResponse({'message': 'Train added successfully'}, status=201)
+        
+        return JsonResponse({
+            'message': 'Train added successfully',
+            'train': {
+                'id': train.id,
+                'name': train.name,
+                'source': train.source,
+                'destination': train.destination,
+                'total_seats': train.total_seats
+            }
+        }, status=201)
+    
+    except KeyError as e:
+        return JsonResponse({'error': f"Missing field: {str(e)}"}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
-    
-# User endpoint to get seat availability
+
 @csrf_exempt
 def get_seat_availability(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
-    source = request.GET.get('source')
-    destination = request.GET.get('destination')
-    
-    if not source or not destination:
-        return JsonResponse({'error': 'Source and destination are required'}, status=400)
-    
-    trains = Train.objects.filter(source=source, destination=destination)
-    availability = []
-    for train in trains:
-        seats = Seat.objects.filter(train=train, is_booked=False)
-        availability.append({
-            'train_id': train.id,
-            'available_seats': seats.count()
+    try:
+        source = request.GET.get('source')
+        destination = request.GET.get('destination')
+        
+        if not source or not destination:
+            return JsonResponse({
+                'error': 'Source and destination are required'
+            }, status=400)
+        
+        trains = Train.objects.filter(
+            source=source,
+            destination=destination
+        ).values('id', 'name', 'available_seats')
+        
+        return JsonResponse({
+            'trains': list(trains)
         })
-    
-    return JsonResponse({'trains': availability})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 # User endpoint to book a seat
 @csrf_exempt

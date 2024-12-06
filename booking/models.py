@@ -31,10 +31,16 @@ class User(AbstractUser):
     
 
 class Train(models.Model):
-    name = models.CharField(max_length=255)
-    source = models.CharField(max_length=255)
-    destination = models.CharField(max_length=255)
+    name = models.CharField(max_length=100)
+    source = models.CharField(max_length=100)
+    destination = models.CharField(max_length=100)
     total_seats = models.IntegerField()
+    available_seats = models.IntegerField()
+
+    def save(self, *args, **kwargs):
+        if not self.id:  # New train
+            self.available_seats = self.total_seats
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.source} -> {self.destination})"
