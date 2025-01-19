@@ -1,41 +1,28 @@
 import json
 import logging
-from django.shortcuts import render
 from django.http import JsonResponse
 from django.contrib.auth import authenticate
-from .models import User, Train, Seat, Booking
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-from django.http import JsonResponse
 from django.db.models import F
 from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.db import transaction
-from django.contrib.auth.decorators import login_required
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from .models import User, Train, Seat, Booking
 
 logger = logging.getLogger(__name__)
 
 @csrf_exempt
 def register_user(request):
     if request.method != 'POST':
-        logger.error("Method not allowed, only POST is allowed.")
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    logger.info("Register API triggered")
     try:
-        # Parse JSON data from request body
         data = json.loads(request.body)
-        logger.info(f"Received data: {data}")
-
-        # Validate required fields
         if 'username' not in data or 'password' not in data:
-            logger.error("Missing 'username' or 'password' in the request")
             return JsonResponse({'error': 'Username and password are required'}, status=400)
-         
-        # Create the user
+
         user = User.objects.create_user(
             username=data['username'],
             password=data['password'],
@@ -43,7 +30,6 @@ def register_user(request):
             is_active=True
         )
 
-        # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
         return JsonResponse({
             'message': 'Registration successful',
@@ -54,51 +40,29 @@ def register_user(request):
         }, status=201)
 
     except json.JSONDecodeError:
-        logger.error("Invalid JSON data received")
         return JsonResponse({'error': 'Invalid JSON data'}, status=400)
-
     except Exception as e:
-        logger.error(f"Error occurred during registration: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
 @csrf_exempt
 def login_user(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
     try:
         data = json.loads(request.body)
-        
         username = data.get('username')
         password = data.get('password')
-        
-        # Debug logging
-        logger.info(f"Login attempt for username: {username}")
-        
-        # Check if user exists
+
         user = User.objects.filter(username=username).first()
         if not user:
-            logger.error(f"User not found: {username}")
             return JsonResponse({'error': 'Invalid credentials'}, status=401)
-        
-        logger.info(f"Found user: {user.username}, is_active: {user.is_active}")
-        
-        # Try authentication
-        authenticated_user = authenticate(
-            request=request,
-            username=username,
-            password=password
-        )
-        
+
+        authenticated_user = authenticate(request=request, username=username, password=password)
         if authenticated_user is None:
-            logger.error(f"Authentication failed for user: {username}")
             return JsonResponse({'error': 'Invalid credentials'}, status=401)
-        
-        logger.info(f"Authentication successful for user: {username}")
-        
-        # Generate tokens
+
         refresh = RefreshToken.for_user(authenticated_user)
-        
         return JsonResponse({
             'message': 'Login successful',
             'tokens': {
@@ -106,17 +70,15 @@ def login_user(request):
                 'access': str(refresh.access_token)
             }
         })
-        
-    except Exception as e:
-        logger.error(f"Login error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=400)
 
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 @csrf_exempt
 def add_train(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
     try:
         data = json.loads(request.body)
         
@@ -126,9 +88,18 @@ def add_train(request):
             source=data['source'],
             destination=data['destination'],
             total_seats=data['total_seats'],
-            available_seats=data['total_seats']
+            available_seats=data['total_seats'],
+            route=data.get('route', [])
         )
-        
+
+        # Log the train creation
+        logger.info(f"Train created: {train.name} (ID: {train.id})")
+
+        # Create seats for the train
+        for seat_number in range(1, train.total_seats + 1):
+            Seat.objects.create(train=train, seat_number=seat_number)
+            logger.info(f"Seat {seat_number} created for train {train.name}")
+
         return JsonResponse({
             'message': 'Train added successfully',
             'train': {
@@ -139,12 +110,15 @@ def add_train(request):
                 'total_seats': train.total_seats
             }
         }, status=201)
-    
+
     except KeyError as e:
+        logger.error(f"Missing field: {str(e)}")
         return JsonResponse({'error': f"Missing field: {str(e)}"}, status=400)
     except Exception as e:
+        logger.error(f"Error in add_train: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
+@csrf_exempt
 @csrf_exempt
 def get_seat_availability(request):
     if request.method != 'GET':
@@ -159,28 +133,45 @@ def get_seat_availability(request):
 
         source = data['source']
         destination = data['destination']
-        
-        # Query trains
-        trains = Train.objects.filter(source=source, destination=destination)
-        
-        # Format response
-        trains_data = [{
-            'id': train.id,
-            'name': train.name,
-            'source': train.source,
-            'destination': train.destination,
-            'available_seats': train.available_seats,
-            'total_seats': train.total_seats
-        } for train in trains]
-        
-        return JsonResponse({'trains': trains_data})
+
+        # Log the query parameters
+        logger.info(f"Fetching trains for source: {source}, destination: {destination}")
+
+        # Query all trains
+        trains = Train.objects.all()
+        available_trains = []
+
+        for train in trains:
+            # Check if the train has a route
+            if not train.route:
+                continue
+
+            # Convert route to a list if it's stored as a string
+            route = train.route if isinstance(train.route, list) else train.route.split(',')
+
+            # Check if source and destination are in the route
+            if source in route and destination in route:
+                # Ensure source comes before destination in the route
+                if route.index(source) < route.index(destination):
+                    available_trains.append({
+                        'id': train.id,
+                        'name': train.name,
+                        'source': source,
+                        'destination': destination,
+                        'available_seats': train.available_seats,
+                        'total_seats': train.total_seats
+                    })
+
+        # Log the number of trains found
+        logger.info(f"Found {len(available_trains)} trains")
+
+        return JsonResponse({'trains': available_trains})
 
     except Exception as e:
         logger.error(f"Error in get_seat_availability: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
 @api_view(['POST'])
-#@csrf_exempt
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def book_seat(request):
@@ -213,28 +204,17 @@ def book_seat(request):
         train = Train.objects.select_for_update().get(id=train_id)
         logger.info(f"Train found: {train.name}")
 
-        # Now handle train.route correctly
-        route = train.route  # Assuming train.route stores either a list or string
-        
-        # If route is a list (e.g., JSONField)
-        if isinstance(route, list):
-            if source not in route or destination not in route or route.index(source) >= route.index(destination):
-                logger.error("Invalid source or destination for train route")
-                return JsonResponse({'error': 'Invalid source or destination for the selected train'}, status=400)
+        # Check if source and destination are in the route
+        route = train.route if isinstance(train.route, list) else train.route.split(',')
+        logger.info(f"Train route: {route}")
 
-        # If route is a string (comma-separated)
-        elif isinstance(route, str):
-            if route:
-                route = route.split(',')  # Split string into a list
-                if source not in route or destination not in route or route.index(source) >= route.index(destination):
-                    logger.error("Invalid source or destination for train route")
-                    return JsonResponse({'error': 'Invalid source or destination for the selected train'}, status=400)
-            else:
-                logger.error("Train route is not defined properly")
-                return JsonResponse({'error': 'Train route is not defined properly'}, status=400)
-        else:
-            logger.error("Invalid route format")
-            return JsonResponse({'error': 'Invalid route format for the train'}, status=400)
+        if source not in route or destination not in route:
+            logger.error(f"Source or destination not in route: source={source}, destination={destination}")
+            return JsonResponse({'error': 'Invalid source or destination for the selected train'}, status=400)
+
+        if route.index(source) >= route.index(destination):
+            logger.error(f"Invalid order: source={source}, destination={destination}")
+            return JsonResponse({'error': 'Invalid source or destination for the selected train'}, status=400)
 
         # Check for available seats
         available_seat = Seat.objects.filter(train=train, is_booked=False).first()
@@ -244,6 +224,8 @@ def book_seat(request):
 
         # Book the seat
         available_seat.is_booked = True
+        available_seat.source = source  # Update source
+        available_seat.destination = destination  # Update destination
         available_seat.save()
 
         # Create the booking
@@ -278,28 +260,27 @@ def book_seat(request):
         logger.error(f"Error in booking: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
-@csrf_exempt
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_booking_details(request):
     if request.method != 'GET':
-        logger.error("Method not allowed in get_booking_details")
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
     try:
-        # Get and validate parameters
         booking_id = request.GET.get('booking_id')
         if not booking_id:
             return JsonResponse({'error': 'Booking ID is required'}, status=400)
-            
-        # Get booking
+
         booking = Booking.objects.get(id=booking_id)
-        
-        # Format response
+        if booking.user != request.user:
+            return JsonResponse({'error': 'Unauthorized'}, status=403)
+
         return JsonResponse({
             'booking': {
                 'id': booking.id,
                 'train_name': booking.train.name,
-                'source': booking.train.source,
-                'destination': booking.train.destination,
+                'source': booking.source,
+                'destination': booking.destination,
                 'booking_time': booking.booking_time
             }
         })
@@ -307,5 +288,4 @@ def get_booking_details(request):
     except Booking.DoesNotExist:
         return JsonResponse({'error': 'Booking not found'}, status=404)
     except Exception as e:
-        logger.error(f"Error in get_booking_details: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)

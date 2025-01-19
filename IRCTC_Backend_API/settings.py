@@ -102,12 +102,13 @@ WSGI_APPLICATION = 'IRCTC_Backend_API.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'users_wo3t',
-        'USER': 'users_wo3t_user',
-        'PASSWORD': 'RlvE7gRJ81jHC7EsYM6acO6vd2Uu5sP7',
-        'HOST': 'dpg-ct91lv3v2p9s73eoqcl0-a.singapore-postgres.render.com',
+        'NAME': 'IRCTC',
+        'USER': 'vaibhav',
+        'PASSWORD': 'vaibhav',
+        'HOST': '127.0.0.1',
         'PORT': '5432',
-    }
+    },
+    
 }
 
 REST_FRAMEWORK = {
